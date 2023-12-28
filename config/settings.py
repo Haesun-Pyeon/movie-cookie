@@ -1,6 +1,6 @@
 import environ
 from pathlib import Path
-import os
+from datetime import timedelta
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -10,12 +10,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-env = environ.Env(DEBUG=(bool, True))
+env = environ.Env(DEBUG=(bool, False))
 
 environ.Env.read_env(BASE_DIR / ".env")
 
 SECRET_KEY = env("SECRET_KEY")
 KMDB_API_KEY = env("KMDB_API_KEY")
+KOBIS_API_KEY = env("KOBIS_API_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env("DEBUG")
@@ -42,6 +43,7 @@ INSTALLED_APPS = [
     "dj_rest_auth.registration",
     "django.contrib.sites",
     "django_cleanup.apps.CleanupConfig",
+    "django_crontab",
     "drf_spectacular",
     # custom apps
     "movieinfo",
@@ -72,9 +74,7 @@ ROOT_URLCONF = "config.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [
-            os.path.join(BASE_DIR, "templates"),
-        ],
+        "DIRS": [],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -93,13 +93,23 @@ WSGI_APPLICATION = "config.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
+# DATABASES = {
+#     "default": {
+#         "ENGINE": "django.db.backends.sqlite3",
+#         "NAME": BASE_DIR / "db.sqlite3",
+#     }
+# }
+
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": "movie_cookie",
+        "USER": "root",
+        "PASSWORD": env("DB_PASSWORD"),
+        "HOST": "localhost",
+        "PORT": env("DB_PORT"),
     }
 }
-
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
@@ -129,7 +139,7 @@ TIME_ZONE = "Asia/Seoul"
 
 USE_I18N = True
 
-USE_TZ = True
+USE_TZ = False
 
 
 # Static files (CSS, JavaScript, Images)
@@ -149,6 +159,20 @@ MEDIA_ROOT = BASE_DIR / "media"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+AUTH_USER_MODEL = "accounts.User"
+
+# dj-rest-auth
+REST_USE_JWT = True  # JWT 사용 여부
+JWT_AUTH_COOKIE = "my-app-auth"  # 호출할 Cookie Key 값
+JWT_AUTH_REFRESH_COOKIE = "my-refresh-token"  # Refresh Token Cookie Key 값
+ACCOUNT_EMAIL_VERIFICATION = "none"  # email 인증 필수 여부
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),  # AccessToken 유효 기간 설정
+    # RefreshToken 유효 기간 설정
+    "SLIDING_TOKEN_REFRESH_LIFETIME": timedelta(days=1),
+}
+
 
 # ===== REST FRAMEWORK SETTINGS =====
 REST_FRAMEWORK = {
@@ -157,12 +181,28 @@ REST_FRAMEWORK = {
         "rest_framework.renderers.BrowsableAPIRenderer",
     ],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ],
 }
 
 SITE_ID = 1
 
+# ===== SPECTACULAR SETTINGS =====
 SPECTACULAR_SETTINGS = {
     "TITLE": "Movie Cookie",
     "DESCRIPTION": "이 API는 Movie Cookie 사이트에서 이용하는 API입니다. 회원관리, 커뮤니티, 영화정보, 영화추천의 기능이 있습니다.",
     "VERSION": "1.0.0",
 }
+
+# ===== custom user model =====
+AUTH_USER_MODEL = "accounts.User"
+
+# ===== CRONTAB SETTINGS =====
+CRONJOBS = [
+    (
+        "0 13 * * *",
+        "recommend.cron.update_csv",
+        ">> /home/ubuntu/app/movie-cookie/cron.log 2>&1",
+    ),
+]
